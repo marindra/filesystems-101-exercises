@@ -24,7 +24,7 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 //	char symlinkToExe[PATH_MAX];
 	char pathToExe[PATH_MAX] = "";
 	{
-		char symlinkToExe[PATH_MAX];
+		char symlinkToExe[PATH_MAX] = "";
 		if (sprintf(symlinkToExe, "/proc/%d/exe",pid) == -1) {
 			//sprintf_s don't exist on my computer((
 			// It isn't error of access, so I don't use report_error
@@ -42,23 +42,25 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 	// Get array of comand line parameters
 
 	const size_t MAX_ARGS_COUNT = 1 << 12;
-	const size_t MAX_ARG_LENGTH = 1 << 12;
-
-	char* possArgvAr[MAX_ARGS_COUNT];
+	size_t countOfArgs = 0;
 	char* argvAr[MAX_ARGS_COUNT];
 
-	size_t countOfArgs = 0;
-	for (size_t i = 0; i < MAX_ARGS_COUNT; ++i) {
-		possArgvAr[i] = (char*) malloc(MAX_ARG_LENGTH * sizeof(char));
-		if (possArgvAr[i] == NULL) {
-			perror("I have big troubles because I don't have enough memory\n");
-			totalFree(possArgvAr, 0, i);
-			// It isn't access error so I don't call report_error
-			return;
-		}
-	}
-
 	{
+		const size_t MAX_ARG_LENGTH = 1 << 12;
+
+		char* possArgvAr[MAX_ARGS_COUNT];
+
+		for (size_t i = 0; i < MAX_ARGS_COUNT; ++i) {
+			possArgvAr[i] = (char*) malloc(MAX_ARG_LENGTH * sizeof(char));
+			if (possArgvAr[i] == NULL) {
+//				perror("I have big troubles because I don't have enough memory\n");
+				totalFree(possArgvAr, 0, i);
+				// It isn't access error so I don't call report_error
+				return;
+			}
+		}
+
+
 		char pathToCmdPar[PATH_MAX] = "";
 		if (sprintf(pathToCmdPar, "/proc/%d/cmdline", pid) == -1) {
 			totalFree(possArgvAr, 0, MAX_ARGS_COUNT);
@@ -75,7 +77,7 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 
 		for (size_t i = 0; i < MAX_ARGS_COUNT; ++i) {
 			size_t buf_size = MAX_ARG_LENGTH;
-			if ((getline(possArgvAr+i, &buf_size, cmdlineParam) == -1) || (possArgvAr[i][0] == '\0')) {
+			if ((getdelim(possArgvAr+i, &buf_size, '\0', cmdlineParam) == -1) || (possArgvAr[i][0] == '\0')) {
 				argvAr[i] = NULL;
 				countOfArgs = i;
 				break;
@@ -85,34 +87,34 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 		}
 
 		fclose(cmdlineParam);
+		totalFree(possArgvAr, countOfArgs, MAX_ARGS_COUNT);
 	}
 
 	// Get environ variables
 
 	const size_t MAX_ENV_VARS_COUNT = 1 << 12;
-	const size_t MAX_ENV_VAR_LENGTH = 1 << 12;
+	size_t countOfEnvVars = 0;
 
-	char* possEnvVars[MAX_ENV_VARS_COUNT];
 	char* envAr[MAX_ENV_VARS_COUNT];
 
-	size_t countOfEnvVars = 0;
-	for (size_t i = 0; i < MAX_ENV_VARS_COUNT; ++i) {
-		possEnvVars[i] = (char*) malloc(MAX_ENV_VAR_LENGTH*sizeof(char));
-		if (possEnvVars[i] == NULL) {
-			perror("I have big troubles because I don't have enough memory\n");
-			totalFree(possEnvVars, 0, i);
-			totalFree(argvAr, 0, countOfArgs);
-			totalFree(possArgvAr, countOfArgs, MAX_ARGS_COUNT)
-;			// It isn't access error so I don't call report_error
-			return;
-		}
-	}
-
 	{
+		const size_t MAX_ENV_VAR_LENGTH = 1 << 12;
+
+		char* possEnvVars[MAX_ENV_VARS_COUNT];
+		for (size_t i = 0; i < MAX_ENV_VARS_COUNT; ++i) {
+			possEnvVars[i] = (char*) malloc(MAX_ENV_VAR_LENGTH*sizeof(char));
+			if (possEnvVars[i] == NULL) {
+//				perror("I have big troubles because I don't have enough memory\n");
+				totalFree(possEnvVars, 0, i);
+				totalFree(argvAr, 0, countOfArgs);
+				// It isn't access error so I don't call report_error
+				return;
+			}
+		}
+
 		char pathToEnvironVar[PATH_MAX] = "";
 		if (sprintf(pathToEnvironVar, "/proc/%d/environ", pid) == -1) {
 			totalFree(argvAr, 0, countOfArgs);
-			totalFree(possArgvAr, countOfArgs, MAX_ARGS_COUNT);
 			totalFree(possEnvVars, 0, MAX_ENV_VARS_COUNT);
 			// It isn't access error so I don't call report_error
 			return;
@@ -122,14 +124,13 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 		if (environ == NULL) {
 			report_error(pathToEnvironVar, errno);
 			totalFree(possEnvVars, 0, MAX_ENV_VARS_COUNT);
-			totalFree(possArgvAr, 0, countOfArgs);
-			totalFree(argvAr, countOfArgs, MAX_ARGS_COUNT);
+			totalFree(argvAr, 0, countOfArgs);
 			return;
 		}
 
 		for (size_t i = 0; i < MAX_ENV_VARS_COUNT; ++i) {
 			size_t buf_size = MAX_ENV_VAR_LENGTH;
-			if ((getline(possEnvVars+i, &buf_size, environ) == -1) || (possEnvVars[i][0] == '\0')) {
+			if ((getdelim(possEnvVars+i, &buf_size, '\0', environ) == -1) || (possEnvVars[i][0] == '\0')) {
 //				printf("done\n");
 				envAr[i] = NULL;
 				countOfEnvVars = i;
@@ -140,6 +141,7 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 		}
 
 		fclose(environ);
+		totalFree(possEnvVars, countOfEnvVars, MAX_ENV_VARS_COUNT);
 	}
 
 	// report process! Ya-hoo!
@@ -147,8 +149,6 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 
 	// Total freedom)
 	totalFree(argvAr, 0, countOfArgs);
-	totalFree(possArgvAr, countOfArgs, MAX_ARGS_COUNT);
-	totalFree(possEnvVars, countOfEnvVars, MAX_ENV_VARS_COUNT);
 	totalFree(envAr, 0, countOfEnvVars);
 
 };
