@@ -13,7 +13,7 @@ void totalFree(char** argvAr, const size_t start, const size_t end) {
 }
 
 void WorkWithDirectory(struct dirent* dirInProc) {
-	size_t pid = strtol(dirInProc->d_name, NULL, 10);
+	pid_t pid = strtol(dirInProc->d_name, NULL, 10);
 	if (pid == 0) {
 		return;
 	}
@@ -22,10 +22,10 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 	// Get path to exe
 
 //	char symlinkToExe[PATH_MAX];
-	char pathToExe[PATH_MAX];
+	char pathToExe[PATH_MAX] = "";
 	{
 		char symlinkToExe[PATH_MAX];
-		if (sprintf(symlinkToExe, "/proc/%ld/exe",pid) == -1) {
+		if (sprintf(symlinkToExe, "/proc/%d/exe",pid) == -1) {
 			//sprintf_s don't exist on my computer((
 			// It isn't error of access, so I don't use report_error
 			perror("Sprintf failed.\n");
@@ -49,7 +49,7 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 
 	size_t countOfArgs = 0;
 	for (size_t i = 0; i < MAX_ARGS_COUNT; ++i) {
-		possArgvAr[i] = (char*) malloc(MAX_ARG_LENGTH*sizeof(char));
+		possArgvAr[i] = (char*) malloc(MAX_ARG_LENGTH * sizeof(char));
 		if (possArgvAr[i] == NULL) {
 			perror("I have big troubles because I don't have enough memory\n");
 			totalFree(possArgvAr, 0, i);
@@ -59,8 +59,8 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 	}
 
 	{
-		char pathToCmdPar[PATH_MAX];
-		if (sprintf(pathToCmdPar, "/proc/%ld/cmdline", pid) == -1) {
+		char pathToCmdPar[PATH_MAX] = "";
+		if (sprintf(pathToCmdPar, "/proc/%d/cmdline", pid) == -1) {
 			totalFree(possArgvAr, 0, MAX_ARGS_COUNT);
 			// It isn't access error so I don't call report_error
 			return;
@@ -76,7 +76,6 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 		for (size_t i = 0; i < MAX_ARGS_COUNT; ++i) {
 			size_t buf_size = MAX_ARG_LENGTH;
 			if ((getline(possArgvAr+i, &buf_size, cmdlineParam) == -1) || (possArgvAr[i][0] == '\0')) {
-//				printf("done\n");
 				argvAr[i] = NULL;
 				countOfArgs = i;
 				break;
@@ -110,8 +109,8 @@ void WorkWithDirectory(struct dirent* dirInProc) {
 	}
 
 	{
-		char pathToEnvironVar[PATH_MAX];
-		if (sprintf(pathToEnvironVar, "/proc/%ld/environ", pid) == -1) {
+		char pathToEnvironVar[PATH_MAX] = "";
+		if (sprintf(pathToEnvironVar, "/proc/%d/environ", pid) == -1) {
 			totalFree(argvAr, 0, countOfArgs);
 			totalFree(possArgvAr, countOfArgs, MAX_ARGS_COUNT);
 			totalFree(possEnvVars, 0, MAX_ENV_VARS_COUNT);
