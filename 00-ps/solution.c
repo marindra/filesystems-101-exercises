@@ -167,12 +167,5 @@ void ps(void)
 		WorkWithDirectory(dirInProc);
 	}
 
-/*	for (int i = 0; i < 254; ++i) {
-		if ((dirInProc = readdir(procDir)) != NULL) {
-        	        WorkWithDirectory(dirInProc);
-	        }
-
-	}*/
-
 	closedir(procDir);
 }
