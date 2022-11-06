@@ -3,11 +3,11 @@
 #include <errno.h>
 #include <unistd.h>
 
-//#include <stdio.h>
+#include <stdio.h>
 
 char findInode(int img, struct ext2_inode* inp, int inNum, struct ext2_super_block* supBl) {
 	// read super block
-	if (pread(img, supBl, sizeof(struct ext2_super_block)/*SUPERBLOCK_SIZE*/, SUPERBLOCK_OFFSET) < 0) {
+	if (pread(img, supBl, sizeof(struct ext2_super_block)/*SUPERBLOCK_SIZE*/, 1024/*SUPERBLOCK_OFFSET*/) < 0) {
 		return 1;
 	}
 
@@ -18,14 +18,14 @@ char findInode(int img, struct ext2_inode* inp, int inNum, struct ext2_super_blo
 	//read group
 	struct ext2_group_desc grDesc = {0};
 	size_t groupNum = (inNum - 1) / supBl->s_inodes_per_group;
-	const size_t blSize = 1024 << supBl->s_log_block_size;
+	const size_t blSize = 1024 << (supBl->s_log_block_size);
 	if (pread(img, &grDesc, sizeof(struct ext2_group_desc), blSize * (supBl->s_first_data_block+1) + sizeof(struct ext2_group_desc) * groupNum) < 0) {
 		return 1;
 	}
 
 	// read inode
-	size_t num_in_gr = (inNum - 1) % supBl->s_inodes_per_group;
-	if (pread(img, inp, supBl->s_inode_size, grDesc.bg_inode_table * blSize + num_in_gr * supBl->s_inode_size) < 0) {
+	size_t num_in_gr = (inNum - 1) % (supBl->s_inodes_per_group);
+	if (pread(img, inp, supBl->s_inode_size, grDesc.bg_inode_table * blSize + num_in_gr * (supBl->s_inode_size)) < 0) {
 		return 1;
 	}
 
@@ -52,8 +52,13 @@ int copyDirectBlock(int out, size_t blockPos, int img, size_t blSize, size_t* la
 	}
 	
 	free(buf);
-	*lastSize -= len;
+	if ((size_t)len >= *lastSize) {
+		*lastSize = 0;
+	} else {
+		*lastSize -= len;
+	}
 	// We check *lastSize == 0 in the beginning of functions so I don't see the neccessary to check it here
+//	printf("Here\n");
 	return 0;
 };
 
@@ -62,25 +67,30 @@ int copyIndirectBlock(int out, size_t blockPos, int img, size_t blSize, size_t* 
 		return 2; // We read all file
 	}
 
-	int block[blSize / sizeof(int)];
+	//int block[blSize / sizeof(int)];
+	int* block = calloc(blSize / sizeof(int)+1, sizeof(int));
 	if (pread(img, block, blSize, blockPos * blSize) < 0) {
+		free(block);
 		return 1;
 	}
 
 	for (size_t i = 0; i < blSize / sizeof(int); ++i) {
 		int code = copyDirectBlock(out, block[i], img, blSize, lastSize);
 		if (code == 1) {
+			free(block);
 			return 1;
 		} else if (code == 2) {
+			free(block);
 			return 2;
 		}
 	}
+	free(block);
 	return 0;
 };
 
 int copyDoubleIndirectBlock(int out, size_t blockPos, int img, size_t blSize, size_t* lastSize) {
 	//int block[blSize / sizeof(int)];
-        int* block = calloc(blSize / sizeof(int), sizeof(int));
+        int* block = calloc(blSize / sizeof(int)+1, sizeof(int));
         if (pread(img, block, blSize, blockPos * blSize) < 0) {
         	free(block);
                 return 1;
@@ -119,19 +129,20 @@ int copyFromInodeToFD(struct ext2_inode* inpIn, int out, int img, size_t blSize,
 	};
 
 	// 1 indirect block
-	int code = copyIndirectBlock(out, inpIn->i_block[EXT2_NDIR_BLOCKS], img, blSize, lastSize);
+	int code = copyIndirectBlock(out, inpIn->i_block[EXT2_IND_BLOCK], img, blSize, lastSize);
 	if (code == 1) {
 		return 1;
 	} else if (code == 2) {
 		return 0;
 	}
 
+
 	if (*lastSize == 0) {
 		return 0; // We read all file
 	}
 
 	// 1 double indirect
-	code = copyDoubleIndirectBlock(out, inpIn->i_block[EXT2_NDIR_BLOCKS+1], img, blSize, lastSize);
+	code = copyDoubleIndirectBlock(out, inpIn->i_block[EXT2_DIND_BLOCK], img, blSize, lastSize);
 	if (code == 1) {
 		return 1;
 	} else if (code == 2) {
